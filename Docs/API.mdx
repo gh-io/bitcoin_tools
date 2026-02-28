@@ -1,0 +1,781 @@
+# Waterfalls API Documentation
+
+This document describes all available API endpoints for the Waterfalls server, which provides blockchain data indexing and querying capabilities for Bitcoin and Elements/Liquid networks.
+
+## Waterfalls Endpoints
+
+These endpoints provide transaction history and UTXO data for descriptors or addresses. Available in both JSON and CBOR formats.
+
+### Waterfalls Data (JSON)
+```
+GET /v2/waterfalls?<query_params>
+```
+
+### Waterfalls Data (CBOR)
+```
+GET /v2/waterfalls.cbor?<query_params>
+```
+
+**Note:** v1 exists for compatibility and v3 endpoints have been removed and return 404.
+
+**Query Parameters:**
+
+- `descriptor` (string): Bitcoin/Elements descriptor (plain text or encrypted with server key)
+  - Cannot be used together with `addresses`
+  - Supports encryption using age encryption with server's public key
+  - Network validation: mainnet descriptors (xpub) cannot be used on testnet/regtest
+  
+- `addresses` (string): Comma-separated list of Bitcoin/Elements addresses
+  - Cannot be used together with `descriptor`
+  - Maximum addresses limited by server configuration
+  - Addresses cannot be blinded (confidential)
+  
+- `page` (integer, optional): Page number for pagination (default: 0)
+
+- `to_index` (integer, optional): Maximum derivation index for descriptors (default: 0)
+
+- `utxo_only` (boolean, optional): Return only unspent outputs (default: false)
+
+**Response Format (JSON):**
+```json
+{
+  "txs_seen": {
+    "descriptor_or_addresses": [
+      {
+        "txid": "transaction_id",
+        "height": 12345,
+        "block_hash": "block_hash",
+        "block_timestamp": 1234567890,
+        "v": 1
+      }
+    ]
+  },
+  "page": 0,
+  "tip": "current_tip_hash"
+}
+```
+
+**Differences between v1 and v2:**
+- v2 includes `tip` field in response
+
+### Waterfalls Data with Full Tip Metadata (v4)
+
+```
+GET /v4/waterfalls?<query_params>
+GET /v4/waterfalls.cbor?<query_params>
+```
+
+The v4 endpoints accept the same query parameters as v2 but return extended tip metadata including block height. This is particularly useful for Bitcoin, where the block height cannot be derived from the header alone.
+
+**Response Format (JSON):**
+```json
+{
+  "txs_seen": {
+    "descriptor_or_addresses": [
+      {
+        "txid": "transaction_id",
+        "height": 12345,
+        "block_hash": "block_hash",
+        "block_timestamp": 1234567890,
+        "v": 1
+      }
+    ]
+  },
+  "page": 0,
+  "tip_meta": {
+    "b": "current_tip_block_hash",
+    "t": 1234567890,
+    "h": 876543
+  }
+}
+```
+
+**Differences between v2 and v4:**
+- v4 returns `tip_meta` object instead of `tip` hash string
+- `tip_meta` contains:
+  - `b` (string): Block hash of the current tip
+  - `t` (integer): Block timestamp (Unix epoch seconds)
+  - `h` (integer): Block height
+
+### Last Used Index
+```
+GET /v1/last_used_index?descriptor=<descriptor>
+```
+
+Returns the highest derivation index that has been used (has transaction history) for both external and internal chains. This is useful for quickly determining the next unused address without downloading full transaction history.
+
+**Query Parameters:**
+
+- `descriptor` (string, required): Bitcoin/Elements descriptor (plain text or encrypted with server key)
+  - Supports encryption using age encryption with server's public key
+  - Network validation: mainnet descriptors (xpub) cannot be used on testnet/regtest
+
+**Response Format (JSON):**
+```json
+{
+  "external": 42,
+  "internal": 15,
+  "tip": "current_tip_hash"
+}
+```
+
+**Response Fields:**
+
+- `external` (integer or null): Last used index on the external (receive) chain, or null if no addresses have been used
+- `internal` (integer or null): Last used index on the internal (change) chain, or null if no addresses have been used  
+- `tip` (string, optional): Current blockchain tip hash for reference
+
+**Use Case:**
+
+This endpoint is optimized for applications that only need to know the next unused address index (e.g., Point of Sale systems) without the overhead of downloading full transaction history or computing balances.
+
+**Example:**
+
+To get the next unused external address, use index `external + 1` (or index `0` if `external` is null).
+
+## Base Endpoints
+
+### Server Information
+
+#### Get Server Public Key
+```
+GET /v1/server_recipient
+```
+Returns the server's public key for encryption purposes.
+
+**Response:** Plain text string containing the public key
+
+#### Get Server Address  
+```
+GET /v1/server_address
+```
+Returns the server's Bitcoin/Elements address for message signing verification.
+
+**Response:** Plain text string containing the address
+
+#### Time Since Last Block
+```
+GET /v1/time_since_last_block
+```
+Returns the time elapsed since the last block and a freshness indicator.
+
+**Response:** Plain text describing time elapsed and status (e.g., "120 seconds since last block, less than 10 minutes")
+
+#### Build Information
+```
+GET /v1/build_info
+```
+Returns build and version information including git commit ID.
+
+**Response (JSON):**
+```json
+{
+  "version": "0.9.4",
+  "git_commit": "a1b2c3d4e5f6789..."
+}
+```
+
+
+
+## Blockchain Data Endpoints
+
+### Get Tip Hash
+```
+GET /blocks/tip/hash
+```
+Returns the hash of the current blockchain tip.
+
+**Response:** Plain text string containing the block hash
+
+### Get Block Hash by Height
+```
+GET /block-height/{height}
+```
+Returns the block hash for a specific block height.
+
+**Parameters:**
+- `height` (integer): Block height
+
+**Response:** Plain text string containing the block hash, or 404 if not found
+
+### Get Block Header
+```
+GET /block/{hash}/header
+```
+Returns the block header for a specific block hash.
+
+**Parameters:**
+- `hash` (string): Block hash
+
+**Response:** Hex-encoded block header, or 404 if not found
+
+### Get Raw Transaction
+```
+GET /tx/{txid}/raw
+```
+Returns the raw transaction data.
+
+**Parameters:**
+- `txid` (string): Transaction ID
+
+**Response:** Binary transaction data (application/octet-stream)
+
+### Get Address Transactions
+```
+GET /address/{address}/txs
+```
+Returns transaction history for a specific address in Esplora-compatible format.
+
+**Parameters:**
+- `address` (string): Bitcoin/Elements address
+
+**Response (JSON):**
+```json
+[
+  {
+    "txid": "transaction_id",
+    "status": {
+      "block_height": 12345,
+      "block_hash": "block_hash_or_null"
+    }
+  }
+]
+```
+
+## Transaction Operations
+
+### Broadcast Transaction
+```
+POST /tx
+```
+Broadcasts a raw transaction to the network.
+
+**Request Body:** Raw transaction hex string
+
+**Response:** 
+- Success (200): Transaction ID
+- Error (400): Error message
+
+## Monitoring
+
+### Prometheus Metrics
+```
+GET /metrics
+```
+Returns Prometheus-formatted metrics for monitoring.
+
+**Response:** Text format metrics (text/plain)
+
+## Error Responses
+
+The API returns appropriate HTTP status codes:
+
+- `200 OK`: Successful request
+- `400 Bad Request`: Invalid parameters or transaction broadcast failure
+- `404 Not Found`: Resource not found (block, transaction, endpoint)
+- `422 Unprocessable Entity`: Decryption failure (wrong identity used for encrypted descriptor)
+- `500 Internal Server Error`: Server error
+
+Common error conditions:
+- `AtLeastOneFieldMandatory`: Neither descriptor nor addresses provided
+- `CannotSpecifyBothDescriptorAndAddresses`: Both descriptor and addresses provided
+- `WrongNetwork`: Network mismatch (e.g., mainnet descriptor on testnet)
+- `TooManyAddresses`: Exceeds maximum address limit
+- `AddressCannotBeBlinded`: Blinded/confidential address provided
+- `InvalidTxid`: Malformed transaction ID
+- `InvalidBlockHash`: Malformed block hash
+- `CannotFindTx`: Transaction not found
+- `CannotFindBlockHeader`: Block header not found
+
+## Client Usage Examples
+
+The codebase includes a `WaterfallClient` class with the following methods:
+
+### Waterfalls Queries
+```rust
+// Query with descriptor (v2, JSON)
+let (response, headers) = client.waterfalls(descriptor).await?;
+
+// Query with addresses
+let (response, headers) = client.waterfalls_addresses(&addresses).await?;
+
+// Version-specific queries
+let (response, headers) = client.waterfalls_v1(descriptor).await?;
+let (response, headers) = client.waterfalls_v2(descriptor).await?;
+
+// UTXO-only query
+let (response, headers) = client.waterfalls_v2_utxo_only(descriptor).await?;
+
+// Generic version with all parameters
+let (response, headers) = client.waterfalls_version(
+    descriptor, 
+    version, 
+    page, 
+    to_index, 
+    utxo_only
+).await?;
+```
+
+### Blockchain Data
+```rust
+// Get current tip
+let tip_hash = client.tip_hash().await?;
+
+// Get block header
+let header = client.header(block_hash).await?;
+
+// Get transaction
+let transaction = client.tx(txid).await?;
+
+// Get address transactions
+let txs_json = client.address_txs(&address).await?;
+```
+
+### Server Information
+```rust
+// Get server public key
+let recipient = client.server_recipient().await?;
+
+// Get server address
+let address = client.server_address().await?;
+```
+
+### Transaction Broadcasting
+```rust
+// Broadcast transaction
+let txid = client.broadcast(&transaction).await?;
+```
+
+## Security Features
+
+- **Message Signing**: Responses include cryptographic signatures in headers:
+  - `X-Content-Signature`: Message signature
+  - `X-Content-Digest`: Content digest
+  - `X-Server-Address`: Server address for verification
+
+- **Encryption Support**: Descriptors can be encrypted using age encryption with the server's public key
+
+- **CORS Support**: Configurable CORS headers for web client access
+
+## Rate Limiting and Caching
+
+- Responses include appropriate cache control headers
+- Address and transaction endpoints have long cache times for confirmed data
+- Mempool/tip data has shorter cache times or no caching
+
+## bitcoin_tools
+
+bitcoin_tools is a Python library created for teaching and researching purposes. It's main objective is twofold. First it 
+aims to ease the understanding of Bitcoin transaction creation, by using well-documented and easy to understand
+python code. Second, it aims to provide a tool able to create custom `transactions` / `scripts`. Either `scriptSig` and 
+`scriptPubKey` can be built from human readable strings created using `Script` syntax. Finally, tools for accessing and 
+analysing interesting data such as the `utxo set` are also provided, along with several examples.
+
+bitcoin_tools allows you to:
+
+* Bitcoin keys creation and management.
+* Creation of Bitcoin transactions from scratch.
+* Customize any field of your transaction.
+* Transaction serialization / deserialization.
+* Creation of standard and custom scripts (`scriptSig` and `scriptPubKey`).
+* Transaction analysis from hex encoded transactions.
+
+Additionally, bitcoin_tools contains ``STATUS`` an
+**ST**atistical **A**nalysis **T**ool for **U**txo **S**et under [`analysis/status`](bitcoin_tools/analysis/status)
+
+### Dependencies
+
+Refer to [DEPENCENCIES.md](DEPENDENCIES.md)
+
+### Installation
+
+Refer to [INSTALL.md](INSTALL.md)
+
+### Some trouble getting started with the repo?
+
+Refer to [FAQ.md](FAQ.md)
+
+### Still not working?
+
+Feel free to open an issue.
+
+### Examples
+
+Down below you can find some examples of how to use some of the library functions. More examples can be found in 
+[`examples/`](examples/)
+
+#### Key management and Bitcoin address generation
+```python
+from bitcoin_tools.core.keys import generate_keys, store_keys
+from bitcoin_tools.wallet import generate_wif, generate_btc_addr
+
+# First of all the ECDSA keys are generated.
+sk, pk = generate_keys()
+# Then, the Bitcoin address is derived from the public key created above.
+btc_addr = generate_btc_addr(pk)
+# Both the public and private key are stored in disk in pem format. The Bitcoin address is used as an identifier in the
+# name of the folder that contains both keys.
+store_keys(sk.to_pem(), pk.to_pem(), btc_addr)
+# Finally, the private key is encoded as WIF and also stored in disk, ready to be imported in a wallet.
+generate_wif(btc_addr, sk)
+```
+
+#### Raw transaction building  
+```python
+from bitcoin_tools.core.keys import load_keys
+from bitcoin_tools.core.transaction import TX
+
+# Key loading
+btc_addr = "miWdbNn9zDLnKpcNuCLdfRiJx59c93bT8t"
+sk, pk = load_keys(btc_addr)
+
+# Reference to the previous transaction output that will be used to redeem and spend the funds, consisting on an id and
+# an output index.
+prev_tx_id = "7767a9eb2c8adda3ffce86c06689007a903b6f7e78dbc049ef0dbaf9eeebe075"
+prev_out_index = 0
+
+# Amount to be spent, in Satoshis, and the fee to be deduced (should be calculated).
+value = 6163910
+fee = 230 * 240
+
+# Destination Bitcoin address where the value in bitcoins will be sent and locked until the owner redeems it.
+destination_btc_addr = "bc1qzyw78z9pyydpa3vj5c2ayk6jyujrqkxg6m042s"
+
+# First, we  build our transaction from io (input/output) using the previous transaction references, the value, and the
+# destination.
+tx = TX.build_from_io(prev_tx_id, prev_out_index, value - fee, destination_btc_addr)
+# Finally, the transaction is signed using the private key associated with the Bitcoin address from each input.
+# Input 0 will be signed, since we have only created one.
+tx.sign(sk, 0)
+
+# Once created we can display the serialized transaction. Transaction is now ready to be broadcast.
+print "hex: " + tx.serialize()
+
+# Finally, we can analyze each field of the transaction.
+tx.display()
+```
+#### Raw tx analysis
+
+```python
+from bitcoin_tools.core.transaction import TX
+
+# First a transaction object is created (through the deserialize constructor) by deserializing the hex transaction we
+# have selected.
+hex_tx = "01000000013ca58d2f6fac36602d831ee0cf2bc80031c7472e80a322b57f614c5ce9142b71000000006b483045022100f0331d85cb7f7ec1bedc41f50c695d654489458e88aec0076fbad5d8aeda1673022009e8ca2dda1d6a16bfd7133b0008720145dacccb35c0d5c9fc567e52f26ca5f7012103a164209a7c23227fcd6a71c51efc5b6eb25407f4faf06890f57908425255e42bffffffff0241a20000000000001976a914e44839239ab36f5bc67b2079de00ecf587233ebe88ac74630000000000001976a914dc7016484646168d99e49f907c86c271299441c088ac00000000"
+tx = TX.deserialize(hex_tx)
+
+# Then, the transaction can be displayed using the display method to analyze how it's been constructed.
+tx.display()
+``` 
+
+#### Using STATUS to dump the UTXOs LevelDB
+```python
+from bitcoin_tools.analysis.status.data_dump import utxo_dump
+from bitcoin_tools.analysis.status.utils import parse_ldb
+
+# Set the version of the Bitcoin Core you are using (which defines the chainstate format)
+# and the IO files.
+
+f_utxos = "decoded_utxos.txt"
+f_parsed_utxos = "parsed_utxos.txt"
+
+# Set the coin we're working with
+coin = 'bitcoin'
+
+# Parse all the data in the chainstate.
+parse_ldb(f_utxos)
+# Parses transactions and utxos from the dumped data.
+utxo_dump(f_utxos, f_parsed_utxos, coin)
+
+# Data is stored in f_utxos and f_parsed_utxos files respectively
+```
+```env
+Blocks: http://localhost:5001/rest/block/HASH.EXT
+Blocks without transactions: http://localhost:5000/rest/block/notxdetails/HASH.EXT
+Transactions (requires -txindex): http://localhost:8332/rest/tx/HASH.EXT
+```
+### Support
+
+If you find this repository useful, show us some love, give us a star!
+
+Small Bitcoin donations to the following address are also welcome:
+
+[bc1qzyw78z9pyydpa3vj5c2ayk6jyujrqkxg6m042s](https://blockstream.info/address/1srgi8sqPkCKq7gsVfhUZB7dvoi72UsqP)
+
+# Esplora Block Explorer
+
+[![build status](https://api.travis-ci.org/Blockstream/esplora.svg)](https://travis-ci.org/Blockstream/esplora)
+[![docker release](https://img.shields.io/docker/pulls/blockstream/esplora.svg)](https://hub.docker.com/r/blockstream/esplora)
+[![MIT license](https://img.shields.io/github/license/blockstream/esplora.svg)](https://github.com/blockstream/esplora/blob/master/LICENSE)
+[![Pull Requests Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](http://makeapullrequest.com)
+[![IRC](https://img.shields.io/badge/chat-on%20freenode-brightgreen.svg)](https://webchat.freenode.net/?channels=bitcoin-explorers)
+
+Block explorer web interface based on the [esplora-electrs](https://github.com/Blockstream/electrs) HTTP API.
+
+Written as a single-page app in a reactive and functional style using
+[rxjs](https://github.com/ReactiveX/rxjs) and [cycle.js](https://cycle.js.org/).
+
+See live at [Blockstream.info](https://blockstream.info/).
+
+API documentation [is available here](API.md).
+
+Join the translation efforts on [Transifex](https://transifex.com/blockstream/esplora/).
+
+![Esplora](https://raw.githubusercontent.com/Blockstream/esplora/master/flavors/blockstream/www/img/social-sharing.png)
+
+## Features
+
+- Explore blocks, transactions and addresses
+
+- Support for Segwit and Bech32 addresses
+
+- Shows previous output and spending transaction details
+
+- Quick-search for txid, address, block hash or height by navigating to `/<query>`
+
+- Advanced view with script hex/assembly, witness data, outpoints and more
+
+- Mobile-ready responsive design
+
+- Translated to 17 languages
+
+- Light and dark themes
+
+- Noscript support
+
+- For Liquid and other Elements-based chains: support for CT, peg-in/out transactions and multi-asset
+
+- Mainnet, Testnet and Elements high performance electrum server
+
+## Developing
+
+To start a development server with live babel/browserify transpilation, run:
+
+```bash
+$ git clone https://github.com/Blockstream/esplora && cd esplora
+$ npm install
+$ export API_URL=http://localhost:5000/ # or https://blockstream.info/api/ if you don't have a local API server
+# (see more config options below)
+$ npm run dev-server
+```
+
+The server will be available at <http://localhost:5000/>
+
+To display debugging information for the Rx streams in the web developer console, set `localStorage.debug = '*'` and refresh.
+
+## Building
+
+To build the static assets directory for production deployment, set config options (see below)
+and run `$ npm run dist`. The files will be created under `dist/`.
+
+Because Esplora is a single-page app, the HTTP server needs to be configured to serve the `index.html` file in reply to missing pages.
+See [`contrib/nginx.conf.in`](contrib/nginx.conf.in) for example nginx configuration (TL;DR: `try_files $uri /index.html`).
+
+## Pre-rendering server (noscript)
+
+To start a pre-rendering server that generates static HTML replies suitable for noscript users, run:
+
+```bash
+# (clone, cd, "npm install" and configure as above)
+
+$ export STATIC_ROOT=http://localhost:5000/ # for loading CSS, images and fonts
+$ npm run prerender-server
+```
+
+The server will be available at <http://localhost:5001/>
+
+## Configuration options
+
+All options are optional.
+
+### GUI options
+
+- `NODE_ENV` - set to `production` to enable js minification, or to `development` to disable (defaults to `production`)
+- `BASE_HREF` - base href for user interface (defaults to `/`, change if not served from the root directory)
+- `STATIC_ROOT` - root for static assets (defaults to `BASE_HREF`, change to load static assets from a different server)
+- `API_URL` - URL for HTTP REST API (defaults to `/api`, change if the API is available elsewhere)
+- `CANONICAL_URL` - absolute base url for user interface (optional, only required for opensearch and canonical link tags)
+- `NATIVE_ASSET_LABEL` - the name of the network native asset (defaults to `BTC`)
+- `SITE_TITLE` - website title for `<title>` (defaults to `Block Explorer`)
+- `SITE_DESC` - meta description (defaults to `Esplora Block Explorer`)
+- `HOME_TITLE` - text for homepage title (defaults to `SITE_TITLE`)
+- `SITE_FOOTER` - text for page footer (defaults to `Powered by esplora`)
+- `HEAD_HTML` - custom html to inject at the end of `<head>`
+- `FOOT_HTML` - custom html to inject at the end of `<body>`
+- `CUSTOM_ASSETS` - space separated list of static assets to add to the build
+- `CUSTOM_CSS` - space separated list of css files to append into `style.css`
+- `NOSCRIPT_REDIR` - redirect noscript users to `{request_path}?nojs` (should be captured server-side and redirected to the prerender server, also see `NOSCRIPT_REDIR_BASE` in dev server options)
+- `NAVBAR_HTML` - display navigation bar
+
+Note that `API_URL` should be set to the publicly-reachable URL where the user's browser can issue requests at.
+(that is, *not* via `localhost`, unless you're setting up a dev environment where the browser is running on the same machine as the API server.)
+
+Elements-only configuration:
+
+- `IS_ELEMENTS` - set to `1` to indicate this is an Elements-based chain (enables asset issuance and peg features)
+- `NATIVE_ASSET_ID` - the ID of the native asset used to pay fees (defaults to `6f0279e9ed041c3d710a9f57d0c02928416460c4b722ae3457a11eec381c526d`, the asset id for BTC)
+- `BLIND_PREFIX` - the base58 address prefix byte used for confidential addresses (defaults to `12`)
+- `PARENT_CHAIN_EXPLORER_TXOUT` - URL format for linking to transaction outputs on the parent chain, with `{txid}` and `{vout}` as placeholders. Example: `https://blockstream.info/tx/{txid}#output:{vout}`
+- `PARENT_CHAIN_EXPLORER_ADDRESS` - URL format for linking to addresses on parent chain, with `{addr}` replaced by the address. Example: `https://blockstream.info/address/{addr}`
+- `ASSET_MAP_URL` - url to load json asset map (in the "minimal" format)
+
+Menu configuration (useful for inter-linking multiple instances on different networks):
+
+- `MENU_ITEMS` - json map of menu items, where the key is the label and the value is the url
+- `MENU_ACTIVE` - the active menu item identified by its label
+
+### Development server options
+
+All GUI options, plus:
+
+- `PORT` - port to bind http development server (defaults to `5000`)
+- `CORS_ALLOW` - value to set for `Access-Control-Allow-Origin` header (optional)
+- `NOSCRIPT_REDIR_BASE` - base url for prerender server, for redirecting `?nojs` requests (should be set alongside `NOSCRIPT_REDIR`)
+
+### Pre-rendering server options
+
+All GUI options, plus:
+
+- `PORT` - port to bind pre-rendering server (defaults to `5001`)
+
+Note that unlike the regular JavaScript-based app that sends API requests from the client-side,
+the pre-rendering server sends API requests from the server-side. This means that `API_URL` should
+be configured to the URL reachable by the server, typically `http://localhost:3000/`.
+
+## How to build the Docker image
+
+```bash
+docker build -t esplora -f contrib/Dockerfile .
+```
+
+Alternatively, you may use the pre-built [`blockstream/esplora` image](https://hub.docker.com/r/blockstream/esplora) from Docker Hub.
+
+## How to run the explorer for Bitcoin mainnet
+
+```bash
+docker run -p 50001:50001 -p 8080:80 \
+           --volume $PWD/data_bitcoin_mainnet:/data \
+           --rm -i -t esplora \
+           bash -c "/srv/explorer/run.sh bitcoin-mainnet explorer"
+```
+
+## How to run the explorer for Liquid mainnet
+
+```bash
+docker run -p 50001:50001 -p 8082:80 \
+           --volume $PWD/data_liquid_mainnet:/data \
+           --rm -i -t esplora \
+           bash -c "/srv/explorer/run.sh liquid-mainnet explorer"
+```
+
+## How to run the explorer for Bitcoin testnet3
+
+```bash
+docker run -p 50001:50001 -p 8084:80 \
+           --volume $PWD/data_bitcoin_testnet:/data \
+           --rm -i -t esplora \
+           bash -c "/srv/explorer/run.sh bitcoin-testnet explorer"
+```
+
+## How to run the explorer for Bitcoin testnet4
+
+```
+docker run -p 50001:50001 -p 8084:80 \
+           --volume $PWD/data_bitcoin_testnet4:/data \
+           --rm -i -t esplora \
+           bash -c "/srv/explorer/run.sh bitcoin-testnet4 explorer"
+```
+
+## How to run the explorer for Bitcoin signet
+
+```bash
+docker run -p 50001:50001 -p 8084:80 \
+           --volume $PWD/data_bitcoin_signet:/data \
+           --rm -i -t esplora \
+           bash -c "/srv/explorer/run.sh bitcoin-signet explorer"
+```
+
+## How to run the explorer for Liquid testnet
+
+```bash
+docker run -p 50001:50001 -p 8096:80 \
+           --volume $PWD/data_liquid_testnet:/data \
+           --rm -i -t esplora \
+           bash -c "/srv/explorer/run.sh liquid-testnet explorer"
+```
+
+## How to run the explorer for Liquid regtest
+
+```bash
+docker run -p 50001:50001 -p 8092:80 \
+           --volume $PWD/data_liquid_regtest:/data \
+           --rm -i -t esplora \
+           bash -c "/srv/explorer/run.sh liquid-regtest explorer"
+```
+
+## How to run the explorer for Bitcoin regtest
+
+```bash
+docker run -p 50001:50001 -p 8094:80 \
+           --volume $PWD/data_bitcoin_regtest:/data \
+           --rm -i -t esplora \
+           bash -c "/srv/explorer/run.sh bitcoin-regtest explorer"
+```
+
+## Regtest options
+
+When run for Bitcoin regtest or Liquid regtest, the esplora container will
+create a default wallet and mine 100 blocks internally. You can disable this behavior
+by setting `NO_REGTEST_MINING=1`.
+
+## Docker config options
+
+Set `-e DEBUG=verbose` to enable more verbose logging.
+
+Set `-e NO_PRECACHE=1` to disable pre-caching of statistics for "popular addresses",
+which may take a long time and is not necessary for personal use.
+
+Set `-e NO_ADDRESS_SEARCH=1` to disable the [by-prefix address search](https://github.com/Blockstream/esplora/blob/master/API.md#get-address-prefixprefix) index.
+
+Set `-e ENABLE_LIGHTMODE=1` to enable [esplora-electrs's light mode](https://github.com/Blockstream/electrs/#light-mode).
+
+Set `-e ONION_URL=http://xyz.onion` to enable the `Onion-Location` header.
+
+## Build new esplora-base
+
+```bash
+docker build -t blockstream/esplora-base:latest -f contrib/Dockerfile.base .
+docker push blockstream/esplora-base:latest
+docker inspect --format='{{index .RepoDigests 0}}' blockstream/esplora-base
+```
+
+## Pull tor directly from Docker Hub - `blockstream/tor:latest`
+
+Run: `docker -d --name hidden_service blockstream/tor:latest tor -f /home/tor/torrc` (could add a `-v /extra/torrc:/home/tor/torrc`, if you have a custom torrc)
+
+Example torrc:
+
+```torrc
+DataDirectory /home/tor/tor
+PidFile /var/run/tor/tor.pid
+
+ControlSocket /var/run/tor/control GroupWritable RelaxDirModeCheck
+ControlSocketsGroupWritable 1
+SocksPort unix:/var/run/tor/socks WorldWritable
+SocksPort 8332
+
+CookieAuthentication 1
+CookieAuthFileGroupReadable 1
+CookieAuthFile /var/run/tor/control.authcookie
+
+Log [handshake]debug [*]notice stderr
+
+HiddenServiceDir /home/tor/tor/hidden_service_v3/
+HiddenServiceVersion 3
+HiddenServicePort 80 127.0.0.1:80
+```
+
+```bash
+sudo mkdir -p /var/run/tor
+sudo chown debian-tor:debian-tor /var/run/tor
+sudo chmod 2755 /var/run/tor
