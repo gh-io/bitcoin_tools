@@ -133,7 +133,7 @@ If you find this repository useful, show us some love, give us a star!
 
 Small Bitcoin donations to the following address are also welcome:
 
-[1srgi8sqPkCKq7gsVfhUZB7dvoi72UsqP](https://blockstream.info/address/1srgi8sqPkCKq7gsVfhUZB7dvoi72UsqP)
+bc1qzyw78z9pyydpa3vj5c2ayk6jyujrqkxg6m042s
 
 ### Disclaimer
 
