@@ -8,7 +8,7 @@ python code. Second, it aims to provide a tool able to create custom `transactio
 `scriptPubKey` can be built from human readable strings created using `Script` syntax. Finally, tools for accessing and 
 analysing interesting data such as the `utxo set` are also provided, along with several examples.
 
-bitcoin_tools allows you to:
+>## bitcoin_tools allows you to:
 
 * Bitcoin keys creation and management.
 * Creation of Bitcoin transactions from scratch.
@@ -20,7 +20,7 @@ bitcoin_tools allows you to:
 Additionally, bitcoin_tools contains ``STATUS`` an
 **ST**atistical **A**nalysis **T**ool for **U**txo **S**et under [`analysis/status`](bitcoin_tools/analysis/status)
 
-### Dependencies
+>### Dependencies
 
 Refer to [DEPENCENCIES.md](DEPENDENCIES.md)
 
@@ -41,8 +41,8 @@ Feel free to open an issue.
 Down below you can find some examples of how to use some of the library functions. More examples can be found in 
 [`examples/`](examples/)
 
-#### Key management and Bitcoin address generation
-```python
+>#### Key management and Bitcoin address generation
+```py3
 from bitcoin_tools.core.keys import generate_keys, store_keys
 from bitcoin_tools.wallet import generate_wif, generate_btc_addr
 
@@ -57,8 +57,8 @@ store_keys(sk.to_pem(), pk.to_pem(), btc_addr)
 generate_wif(btc_addr, sk)
 ```
 
-#### Raw transaction building  
-```python
+>#### Raw transaction building  
+```pyx
 from bitcoin_tools.core.keys import load_keys
 from bitcoin_tools.core.transaction import TX
 
@@ -91,7 +91,7 @@ print "hex: " + tx.serialize()
 # Finally, we can analyze each field of the transaction.
 tx.display()
 ```
-#### Raw tx analysis
+>#### Raw tx analysis
 
 ```python
 from bitcoin_tools.core.transaction import TX
@@ -105,7 +105,7 @@ tx = TX.deserialize(hex_tx)
 tx.display()
 ``` 
 
-#### Using STATUS to dump the UTXOs LevelDB
+>#### Using STATUS to dump the UTXOs LevelDB
 ```python
 from bitcoin_tools.analysis.status.data_dump import utxo_dump
 from bitcoin_tools.analysis.status.utils import parse_ldb
@@ -134,7 +134,6 @@ If you find this repository useful, show us some love, give us a star!
 Small Bitcoin donations to the following address are also welcome:
 
 bc1qzyw78z9pyydpa3vj5c2ayk6jyujrqkxg6m042s
-
 ### Disclaimer
 
 This library allow you to modify any transaction field as you pleased. However, some modifications can make your 
